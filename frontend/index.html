@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Trading Dashboard</title>
+<!-- Bootstrap CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
+
+<style>
+#statusLight {
+    width: 20px; height: 20px; border-radius: 50%; display: inline-block;
+}
+.green { background: green; }
+.red { background: red; }
+.orange { background: orange; }
+
+#logContainer, #signalContainer {
+    height:200px; 
+    overflow:auto; 
+    border:1px solid #ccc; 
+    background:#f9f9f9; 
+    padding:5px; 
+    margin-bottom:20px;
+}
+</style>
+</head>
+<body class="bg-light">
+
+<div class="container mt-4">
+    <h1 class="mb-4">Trading Bot Dashboard</h1>
+    <div class="btn-group mb-3">
+        <button class="btn btn-success" onclick="startBot()">Bot starten</button>
+        <button class="btn btn-primary" onclick="startTrading()">Handel starten</button>
+        <button class="btn btn-warning" onclick="stopTrading()">Handel beenden</button>
+        <button class="btn btn-danger" onclick="stopBot()">Bot beenden</button>
+    </div>
+
+    <h2>Verbindungsstatus: <span id="statusLight" class="red"></span></h2>
+
+    <h2 class="mt-4">Signale</h2>
+    <div id="signalContainer">
+        <pre id="signals" style="margin:0; padding:0;"></pre>
+    </div>
+
+    <h2>Logs</h2>
+    <div id="logContainer">
+        <pre id="logs" style="margin:0; padding:0;"></pre>
+    </div>
+
+    <h2>Märkte</h2>
+    <table class="table table-striped" id="marketsTable">
+        <thead>
+            <tr>
+                <th>Symbol</th>
+                <th>Tendenz</th>
+                <th>Richtung</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <h2>Offene Trades</h2>
+    <table class="table table-striped" id="tradesTable">
+        <thead>
+            <tr><th>ID</th><th>Symbol</th><th>Open Price</th><th>Current Price</th><th>PL</th></tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+</div>
+
+<script>
+async function startBot() {
+    document.getElementById("statusLight").className = "orange";
+    let res = await fetch("/start_bot", {method:"POST"});
+    let data = await res.json();
+    console.log(data);
+}
+
+async function stopBot() {
+    let res = await fetch("/stop_bot", {method:"POST"});
+    let data = await res.json();
+    console.log(data);
+}
+
+async function startTrading() {
+    let res = await fetch("/start_trading", {method:"POST"});
+    let data = await res.json();
+    console.log(data);
+}
+
+async function stopTrading() {
+    let res = await fetch("/stop_trading", {method:"POST"});
+    let data = await res.json();
+    console.log(data);
+}
+
+async function fetchStatus() {
+    let res = await fetch("/status");
+    let state = await res.json();
+    console.log(state);
+
+    // Ampel aktualisieren
+    if (!state.connected) {
+        document.getElementById("statusLight").className = "red";
+    } else if (state.connected && !state.trading_active) {
+        document.getElementById("statusLight").className = "green";
+    } else if (state.trading_active) {
+        document.getElementById("statusLight").className = "green";
+    }
+
+    // Märkte aktualisieren
+    let marketsTable = document.getElementById("marketsTable").getElementsByTagName("tbody")[0];
+    while (marketsTable.rows.length > 0) { marketsTable.deleteRow(0); }
+
+    if (state.markets) {
+        for (let symbol in state.markets) {
+            let row = marketsTable.insertRow();
+            let tendency = state.markets[symbol].tendency || "";
+            let direction = state.markets[symbol].direction || "";
+            row.insertCell().innerText = symbol;
+            row.insertCell().innerText = tendency;
+            row.insertCell().innerText = direction;
+        }
+    }
+
+    // Trades aktualisieren
+    let tradesTable = document.getElementById("tradesTable").getElementsByTagName("tbody")[0];
+    while (tradesTable.rows.length > 0) { tradesTable.deleteRow(0); }
+    if (state.open_trades) {
+        for (let t of state.open_trades) {
+            let row = tradesTable.insertRow();
+            row.insertCell().innerText = t.trade_id;
+            row.insertCell().innerText = t.symbol;
+            row.insertCell().innerText = t.open_price;
+            row.insertCell().innerText = t.current_price;
+            let pl = (t.current_price - t.open_price) * (t.volume || 0.1);
+            row.insertCell().innerText = pl.toFixed(4);
+        }
+    }
+}
+
+async function fetchLogs() {
+    let res = await fetch("/logs");
+    let data = await res.json();
+    document.getElementById("logs").textContent = data.logs.join("");
+}
+
+async function fetchSignals() {
+    let res = await fetch("/signals");
+    let data = await res.json();
+    let signals = data.signals || [];
+    let signalsText = signals.map(s => `${s.time} - ${s.action.toUpperCase()} ${s.symbol} @ ${s.price}`).join("\n");
+    document.getElementById("signals").textContent = signalsText;
+}
+
+setInterval(fetchStatus, 5000);
+setInterval(fetchLogs, 5000);
+setInterval(fetchSignals, 5000);
+
+fetchStatus();
+fetchLogs();
+fetchSignals();
+</script>
+
+<!-- Bootstrap JS (optional, falls du Dropdowns/Modals o.ä. nutzt) -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
